@@ -1,7 +1,7 @@
 import { createConnection } from 'mysql2/promise'
 import { proto } from '@whiskeysockets/baileys'
 import { BufferJSON, initAuthCreds } from '../Utils'
-import { MySQLConfig, sqlData } from '../Types'
+import { MySQLConfig, sqlData, sqlConnection } from '../Types'
 
 /**
  * Stores the full authentication state in mysql
@@ -13,7 +13,7 @@ import { MySQLConfig, sqlData } from '../Types'
  * @param {string} session - Session name to identify the connection, allowing multisessions with mysql
  */
 
-let conn: any
+let conn: sqlConnection
 
 async function connection(config: MySQLConfig, force: boolean = false){
 	const ended = !!conn?.connection?._closing
@@ -43,12 +43,12 @@ async function connection(config: MySQLConfig, force: boolean = false){
 	return conn
 }
 
-export const useMySQLAuthState = async(config: MySQLConfig): Promise<{ state: any, saveCreds: () => Promise<void>, removeCreds: () => Promise<void> }> => {
+export const useMySQLAuthState = async(config: MySQLConfig): Promise<{ state: object, saveCreds: () => Promise<void>, removeCreds: () => Promise<void> }> => {
 	let sqlConn = await connection(config)
 
 	const session = config?.session || 'session-1'
 
-	const query = async (sql: string, values: any) => {
+	const query = async (sql: string, values: Array<string>) => {
 		await sqlConn.ping().catch(async () => {
 			sqlConn = await connection(config, true)
 		})
@@ -66,7 +66,7 @@ export const useMySQLAuthState = async(config: MySQLConfig): Promise<{ state: an
 		return credsParsed
 	}
 
-	const writeData = async (id: string, value: any) => {
+	const writeData = async (id: string, value: object) => {
 		const valueFixed = JSON.stringify(value, BufferJSON.replacer)
 		await query(`INSERT INTO auth (value, id, session) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE value = ?`, [valueFixed, id, session, valueFixed])
 	}
@@ -79,7 +79,7 @@ export const useMySQLAuthState = async(config: MySQLConfig): Promise<{ state: an
 		await query(`DELETE FROM auth WHERE session = ?`, [session])
 	}
 
-	const creds: any = await readData('creds') || initAuthCreds()
+	const creds: object = await readData('creds') || initAuthCreds()
 
 	return {
 		state: {
